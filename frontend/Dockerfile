@@ -1,12 +1,13 @@
-FROM node:20-alpine AS builder
+FROM node:20-slim
+
 WORKDIR /app
+
 COPY package*.json ./
 RUN npm ci
-COPY . .
-RUN npm run build  # For prod; skip for dev
 
-FROM node:20-alpine
-WORKDIR /app
-COPY --from=builder /app .
+COPY . .
+
+RUN npm run build
+
 EXPOSE 3000
 CMD ["npm", "run", "dev"]

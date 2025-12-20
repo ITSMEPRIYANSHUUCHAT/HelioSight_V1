@@ -1,21 +1,24 @@
 # app/logging.py
+
 import logging
 import sys
-import json
+from app.config import settings
 
-def json_formatter(record):
-    return json.dumps({
-        "time": record.asctime,
-        "level": record.levelname,
-        "message": record.msg,
-        "module": record.module,
-        "funcName": record.funcName,
-    })
+
+LOG_FORMAT = (
+    "%(asctime)s | "
+    "%(levelname)s | "
+    "%(name)s | "
+    "%(message)s"
+)
+
 
 def setup_logging():
     root = logging.getLogger()
-    root.setLevel(logging.getLevelName(settings.LOG_LEVEL))
-    
+    root.setLevel(settings.LOG_LEVEL)
+
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter(json_formatter))
+    handler.setFormatter(logging.Formatter(LOG_FORMAT))
+
+    root.handlers.clear()
     root.addHandler(handler)

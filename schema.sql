@@ -1,4 +1,4 @@
--- Enable TimescaleDB extension
+-- Enable TimescaleDB extension (already in image)
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 -- Enum for user roles
@@ -50,12 +50,13 @@ CREATE TABLE provider_integrations (
 -- Index for provider lookups
 CREATE INDEX idx_provider_integrations_company_id ON provider_integrations(company_id);
 
--- Plants (Solar Plants, scoped to company)
+-- Plants (Solar Plants, scoped to company) - NO GIS
 CREATE TABLE plants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
-    location GEOGRAPHY(POINT),  -- For lat/long, optional
+    latitude DECIMAL(9,6),  -- Simple float for lat (e.g., 37.774900)
+    longitude DECIMAL(9,6),  -- Simple float for long (e.g., -122.419400)
     capacity DECIMAL(10,2),  -- e.g., kW
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -65,12 +66,12 @@ CREATE TABLE plants (
 -- Index for plant lookups
 CREATE INDEX idx_plants_company_id ON plants(company_id);
 
--- Devices (Inverters/Devices, linked to plants and providers)
+-- Devices / inverters
 CREATE TABLE devices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     plant_id UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
-    provider_integration_id UUID NOT NULL REFERENCES provider_integrations(id) ON DELETE RESTRICT,  -- Link to provider config
-    device_serial VARCHAR(100) NOT NULL,  -- Provider-specific ID
+    provider_integration_id UUID NOT NULL REFERENCES provider_integrations(id) ON DELETE RESTRICT,
+    device_serial VARCHAR(100) NOT NULL,
     model VARCHAR(100),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     last_data TIMESTAMP,
@@ -85,43 +86,42 @@ CREATE INDEX idx_devices_plant_id ON devices(plant_id);
 CREATE INDEX idx_devices_provider_integration_id ON devices(provider_integration_id);
 
 -- Time-Series Metrics (Hypertable)
--- Standard table first, then convert to hypertable
 CREATE TABLE metrics (
     timestamp TIMESTAMPTZ NOT NULL,
     device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,  -- For partitioning and isolation
-    power_output DECIMAL(10,2),  -- kW
-    energy_generated DECIMAL(10,2),  -- kWh cumulative
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    power_output DECIMAL(10,2),
+    energy_generated DECIMAL(10,2),
     voltage DECIMAL(10,2),
     current DECIMAL(10,2),
     temperature DECIMAL(5,2),
-    status VARCHAR(50),  -- e.g., 'online', 'fault'
-    raw_data JSONB  -- Raw provider response for debugging (Super Admin only)
+    status VARCHAR(50),
+    raw_data JSONB
 );
 
--- Convert to hypertable, partitioned by time (1 day chunks) and company_id (for tenant isolation)
+-- Convert to hypertable
 SELECT create_hypertable('metrics', 'timestamp', chunk_time_interval => INTERVAL '1 day', partitioning_column => 'company_id', number_partitions => 10);
 
 -- Indexes for efficient queries
 CREATE INDEX idx_metrics_device_id_timestamp ON metrics(device_id, timestamp DESC);
 CREATE INDEX idx_metrics_company_id_timestamp ON metrics(company_id, timestamp DESC);
 
--- User-Plant Assignments (For end_users to access specific plants)
+-- User-Plant Assignments
 CREATE TABLE user_plant_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     plant_id UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
-    permissions JSONB NOT NULL DEFAULT '{"read": true, "write": false}',  -- Granular perms
+    permissions JSONB NOT NULL DEFAULT '{"read": true, "write": false}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(user_id, plant_id)
 );
 
--- Audit Logs (For compliance, optional but recommended for production)
+-- Audit Logs
 CREATE TABLE audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id),
-    action VARCHAR(50) NOT NULL,  -- e.g., 'create_plant', 'update_user'
+    action VARCHAR(50) NOT NULL,
     entity_id UUID,
     details JSONB,
     timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -147,7 +147,7 @@ BEGIN
 END;
 $$;
 
--- Compression policy for hypertable (enable after 30 days, compress old data)
+-- Compression policy
 ALTER TABLE metrics SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'company_id',
