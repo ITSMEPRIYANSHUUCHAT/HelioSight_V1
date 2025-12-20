@@ -1,0 +1,6 @@
+-r requirements.txt
+pytest==8.3.3
+alembic==1.13.3
+black==24.8.0
+isort==5.13.2
+flake8==7.1.1
