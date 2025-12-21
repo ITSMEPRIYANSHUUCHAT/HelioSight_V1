@@ -15,3 +15,4 @@ gunicorn==23.0.0  # For prod workers
 requests
 pytz
 tenacity==8.1.0
+python-jose[cryptography]
