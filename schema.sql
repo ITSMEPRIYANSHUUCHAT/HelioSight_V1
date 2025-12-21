@@ -14,6 +14,7 @@ CREATE TABLE companies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     description TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at TIMESTAMPTZ
@@ -173,7 +174,8 @@ END $$;
 ALTER TABLE metrics SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'company_id,device_id',
-    timescaledb.compress_orderby = 'time DESC'
+    timescaledb.compress_orderby = 'timestamp DESC'
 );
+
 
 SELECT add_compression_policy('metrics', INTERVAL '30 days');

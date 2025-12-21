@@ -18,11 +18,13 @@ class User(BaseModel):
     )
 
     full_name: Mapped[str] = mapped_column(
+          "fullname",
         String(255),
         nullable=False,
     )
 
     hashed_password: Mapped[str] = mapped_column(
+         "password_hash",
         String(255),
         nullable=False,
     )

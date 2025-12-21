@@ -1,20 +1,63 @@
 from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+from fastapi.security import OAuth2PasswordBearer
 from jose import jwt
 from passlib.context import CryptContext
 
-SECRET_KEY = "CHANGE_IN_PROD"
-ALGORITHM = "HS256"
+from app.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# ---------------------------------------------------------
+# Password hashing
+# ---------------------------------------------------------
+
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+)
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
-def verify_password(password: str, hashed: str) -> bool:
-    return pwd_context.verify(password, hashed)
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
-def create_access_token(data: dict, minutes: int = 15):
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=minutes)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+# ---------------------------------------------------------
+# OAuth2 scheme (THIS WAS MISSING)
+# ---------------------------------------------------------
+
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/auth/login"
+)
+
+
+# ---------------------------------------------------------
+# JWT helpers
+# ---------------------------------------------------------
+
+def create_access_token(
+    subject: str,
+    role: str,
+    company_id: Optional[str],
+    expires_delta: Optional[timedelta] = None,
+) -> str:
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.JWT_EXPIRE_MINUTES
+        )
+
+    payload = {
+        "sub": subject,
+        "role": role,
+        "company_id": company_id,
+        "exp": expire,
+    }
+
+    return jwt.encode(
+        payload,
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )
