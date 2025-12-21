@@ -1,57 +1,51 @@
-import uuid
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
+from app.auth.schemas import SignupRequest
+from app.auth.security import hash_password
 from app.models.user import User
 from app.models.company import Company
-from app.models.enums import UserRole
-from app.auth.security import hash_password
 
 
-def signup_user(db: Session, data):
-    """
-    Creates:
-    1. Company
-    2. Company admin user
-    """
+def signup_user(db: Session, data: SignupRequest) -> User:
+    user_data = data.user
+    company_data = data.company
 
-    # -------------------------
-    # 1️⃣ Check email uniqueness
-    # -------------------------
-    existing = db.query(User).filter(User.email == data.email).first()
+    # ---------- validations ----------
+    if user_data.password != user_data.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Passwords do not match",
+        )
+
+    existing = db.query(User).filter(User.email == user_data.email).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered",
+            detail="User already exists",
         )
 
-    # -------------------------
-    # 2️⃣ Create company
-    # -------------------------
-    company = Company(
-        name=data.company_name,
-        description=data.company_description,
-        is_active=True,
-    )
-    db.add(company)
-    db.flush()  # get company.id without commit
+    # ---------- company (optional) ----------
+    company = None
+    if company_data:
+        company = Company(
+            name=company_data.name,
+            description=company_data.description,
+        )
+        db.add(company)
+        db.flush()  # get company.id
 
-    # -------------------------
-    # 3️⃣ Create user
-    # -------------------------
+    # ---------- user ----------
     user = User(
-        email=data.email,
-        full_name=data.full_name,
-        hashed_password=hash_password(data.password),
-        role=UserRole.company_admin,
-        company_id=company.id,
+        email=user_data.email,
+        full_name=user_data.fullname,
+        hashed_password=hash_password(user_data.password),
+        role=user_data.role,
+        company_id=company.id if company else None,
         is_active=True,
     )
-    db.add(user)
 
-    # -------------------------
-    # 4️⃣ Commit transaction
-    # -------------------------
+    db.add(user)
     db.commit()
     db.refresh(user)
 
