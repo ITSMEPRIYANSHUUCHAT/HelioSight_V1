@@ -1,18 +1,61 @@
-# app/database.py
+# backend/app/database.py
+
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.pool import QueuePool
 from app.config import settings
 
-# Sync engine for migrations/scripts
-engine = create_engine(settings.DATABASE_URL, pool_size=20, max_overflow=0)
 
-# Async engine for FastAPI
-async_engine = create_async_engine(settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"), echo=False)
-
-# Session factories
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-AsyncSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=async_engine, class_=AsyncSession)
-
+# -------------------------
+# SQLAlchemy Base
+# -------------------------
 class Base(DeclarativeBase):
+    """
+    Base class for all ORM models.
+    Alembic will reference this.
+    """
     pass
+
+
+# -------------------------
+# Engine
+# -------------------------
+engine = create_engine(
+    settings.DATABASE_URL,
+    poolclass=QueuePool,
+    pool_size=10,            # safe default for beta
+    max_overflow=20,         # burst handling
+    pool_timeout=30,
+    pool_recycle=1800,       # avoid stale connections
+    pool_pre_ping=True,     # auto-heal dropped DB connections
+    echo=False,              # NEVER True in prod
+    future=True,
+)
+
+
+# -------------------------
+# Session Factory
+# -------------------------
+SessionLocal = sessionmaker(
+    bind=engine,
+    autoflush=False,
+    autocommit=False,
+    expire_on_commit=False,
+)
+
+
+# -------------------------
+# FastAPI Dependency
+# -------------------------
+def get_db():
+    """
+    Dependency for DB session.
+    Ensures:
+    - One session per request
+    - Proper cleanup
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

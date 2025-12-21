@@ -1,27 +1,34 @@
--- Enable TimescaleDB extension (already in image)
+-- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS timescaledb;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Enum for user roles
+-- =========================
+-- ENUMS
+-- =========================
 CREATE TYPE user_role AS ENUM ('super_admin', 'company_admin', 'end_user');
 
--- Companies (Tenants)
+-- =========================
+-- COMPANIES (EPCs)
+-- =========================
 CREATE TABLE companies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(255) NOT NULL,
+    name TEXT NOT NULL,
     description TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at TIMESTAMPTZ
 );
 
--- Users
+-- =========================
+-- USERS
+-- =========================
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,  -- Use bcrypt or argon2
-    fullname VARCHAR(255),
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    fullname TEXT,
     role user_role NOT NULL,
-    company_id UUID REFERENCES companies(id) ON DELETE CASCADE,  -- Null for super_admins
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     last_login TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -29,128 +36,144 @@ CREATE TABLE users (
     deleted_at TIMESTAMPTZ
 );
 
--- Index for fast user lookups
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_company_id ON users(company_id) WHERE company_id IS NOT NULL;
+CREATE INDEX idx_users_company_id ON users(company_id);
 
--- Provider Integrations (Per Company, for multi-provider support)
+-- =========================
+-- PROVIDER INTEGRATIONS
+-- =========================
 CREATE TABLE provider_integrations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-    provider_type VARCHAR(50) NOT NULL,  -- e.g., 'solis', 'solarman', 'shinemonitor'
-    config JSONB NOT NULL,  -- e.g., { "api_key": "...", "endpoint": "..." }
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    provider_type TEXT NOT NULL, -- solis, solarman, shinemonitor
+    config JSONB NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
     last_sync TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     deleted_at TIMESTAMPTZ,
-    UNIQUE(company_id, provider_type)  -- One config per provider per company
+    UNIQUE(company_id, provider_type)
 );
 
--- Index for provider lookups
-CREATE INDEX idx_provider_integrations_company_id ON provider_integrations(company_id);
-
--- Plants (Solar Plants, scoped to company) - NO GIS
+-- =========================
+-- PLANTS
+-- =========================
 CREATE TABLE plants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
-    latitude DECIMAL(9,6),  -- Simple float for lat (e.g., 37.774900)
-    longitude DECIMAL(9,6),  -- Simple float for long (e.g., -122.419400)
-    capacity DECIMAL(10,2),  -- e.g., kW
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    name TEXT NOT NULL,
+    latitude DECIMAL(9,6),
+    longitude DECIMAL(9,6),
+    capacity_kw DECIMAL(10,2),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     deleted_at TIMESTAMPTZ
 );
 
--- Index for plant lookups
 CREATE INDEX idx_plants_company_id ON plants(company_id);
 
--- Devices / inverters
+-- =========================
+-- DEVICES / INVERTERS
+-- =========================
 CREATE TABLE devices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     plant_id UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
-    provider_integration_id UUID NOT NULL REFERENCES provider_integrations(id) ON DELETE RESTRICT,
-    device_serial VARCHAR(100) NOT NULL,
-    model VARCHAR(100),
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    last_data TIMESTAMP,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    provider_integration_id UUID NOT NULL REFERENCES provider_integrations(id),
+    device_serial TEXT NOT NULL,
+    model TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    last_seen TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     deleted_at TIMESTAMPTZ,
     UNIQUE(plant_id, device_serial)
 );
 
--- Index for device lookups
 CREATE INDEX idx_devices_plant_id ON devices(plant_id);
-CREATE INDEX idx_devices_provider_integration_id ON devices(provider_integration_id);
 
--- Time-Series Metrics (Hypertable)
-CREATE TABLE metrics (
-    timestamp TIMESTAMPTZ NOT NULL,
-    device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
-    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-    power_output DECIMAL(10,2),
-    energy_generated DECIMAL(10,2),
-    voltage DECIMAL(10,2),
-    current DECIMAL(10,2),
-    temperature DECIMAL(5,2),
-    status VARCHAR(50),
-    raw_data JSONB
-);
-
--- Convert to hypertable
-SELECT create_hypertable('metrics', 'timestamp', chunk_time_interval => INTERVAL '1 day', partitioning_column => 'company_id', number_partitions => 10);
-
--- Indexes for efficient queries
-CREATE INDEX idx_metrics_device_id_timestamp ON metrics(device_id, timestamp DESC);
-CREATE INDEX idx_metrics_company_id_timestamp ON metrics(company_id, timestamp DESC);
-
--- User-Plant Assignments
+-- =========================
+-- USER ↔ PLANT ASSIGNMENTS
+-- =========================
 CREATE TABLE user_plant_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     plant_id UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
-    permissions JSONB NOT NULL DEFAULT '{"read": true, "write": false}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    permissions JSONB DEFAULT '{"read": true}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, plant_id)
 );
 
--- Audit Logs
-CREATE TABLE audit_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id),
-    action VARCHAR(50) NOT NULL,
-    entity_id UUID,
-    details JSONB,
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- =========================
+-- 🔥 TIME SERIES METRICS (NARROW)
+-- =========================
+CREATE TABLE metrics (
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    plant_id UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
+    device_id UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+
+    provider VARCHAR(50) NOT NULL,        -- solis / solarman / shinemonitor
+    metric_type VARCHAR(50) NOT NULL,     -- power_kw, energy_kwh, pv01_voltage, etc
+
+    value DOUBLE PRECISION NOT NULL,
+    unit VARCHAR(20),
+
+    timestamp TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- 🔒 Deduplication guarantee
+    CONSTRAINT uq_metric_dedup
+        UNIQUE (device_id, metric_type, timestamp)
 );
 
--- Triggers for updated_at
+-- Convert to hypertable
+SELECT create_hypertable(
+    'metrics',
+    'timestamp',
+    chunk_time_interval => INTERVAL '1 day'
+);
+
+-- Indexes for query speed
+CREATE INDEX idx_metrics_device_time
+    ON metrics (device_id, timestamp DESC);
+
+CREATE INDEX idx_metrics_plant_time
+    ON metrics (plant_id, timestamp DESC);
+
+CREATE INDEX idx_metrics_company_time
+    ON metrics (company_id, timestamp DESC);
+
+-- =========================
+-- UPDATED_AT TRIGGER
+-- =========================
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
-   NEW.updated_at = NOW();
-   RETURN NEW;
+    NEW.updated_at = NOW();
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 DO $$
-DECLARE
-    t text;
+DECLARE t TEXT;
 BEGIN
-    FOREACH t IN ARRAY ARRAY['companies', 'users', 'provider_integrations', 'plants', 'devices', 'user_plant_assignments']
+    FOREACH t IN ARRAY ARRAY[
+        'companies','users','provider_integrations','plants','devices','user_plant_assignments'
+    ]
     LOOP
-        EXECUTE format('CREATE TRIGGER trigger_update_%s BEFORE UPDATE ON %s FOR EACH ROW EXECUTE PROCEDURE update_updated_at();', t, t);
+        EXECUTE format(
+            'CREATE TRIGGER trg_%s_updated BEFORE UPDATE ON %s FOR EACH ROW EXECUTE FUNCTION update_updated_at();',
+            t, t
+        );
     END LOOP;
-END;
-$$;
+END $$;
 
--- Compression policy
+-- =========================
+-- COMPRESSION
+-- =========================
 ALTER TABLE metrics SET (
     timescaledb.compress,
-    timescaledb.compress_segmentby = 'company_id',
-    timescaledb.compress_orderby = 'timestamp DESC'
+    timescaledb.compress_segmentby = 'company_id,device_id',
+    timescaledb.compress_orderby = 'time DESC'
 );
+
 SELECT add_compression_policy('metrics', INTERVAL '30 days');
