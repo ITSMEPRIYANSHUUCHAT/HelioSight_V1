@@ -25,6 +25,7 @@ CREATE TABLE companies (
 -- =========================
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username VARCHAR(50) UNIQUE NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     fullname TEXT,
@@ -125,6 +126,42 @@ CREATE TABLE metrics (
     CONSTRAINT uq_metric_dedup
         UNIQUE (device_id, metric_type, timestamp)
 );
+CREATE TABLE user_profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL UNIQUE
+        REFERENCES users(id) ON DELETE CASCADE,
+
+    whatsapp_number TEXT,
+
+    address_line_1 TEXT,
+    address_line_2 TEXT,
+    city TEXT,
+    state TEXT,
+    country TEXT,
+    pincode TEXT,
+
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    deleted_at TIMESTAMPTZ
+);
+
+CREATE TABLE user_hardware_profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL UNIQUE
+        REFERENCES users(id) ON DELETE CASCADE,
+
+    panel_brand TEXT,
+    panel_capacity_kw TEXT,
+    panel_type TEXT,
+
+    inverter_brand TEXT,
+    inverter_capacity_kw TEXT,
+
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    deleted_at TIMESTAMPTZ
+);
+
 
 -- Convert to hypertable
 SELECT create_hypertable(

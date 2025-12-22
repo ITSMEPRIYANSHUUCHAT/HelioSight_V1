@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import String, Boolean, ForeignKey, Enum
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column,relationship
 
 from app.models.base import BaseModel
 from app.models.enums import UserRole
@@ -16,6 +16,13 @@ class User(BaseModel):
         nullable=False,
         index=True,
     )
+    username: Mapped[str] = mapped_column(
+    String(50),
+    unique=True,
+    nullable=False,
+    index=True,
+    )
+    
 
     full_name: Mapped[str] = mapped_column(
           "fullname",
@@ -34,6 +41,19 @@ class User(BaseModel):
         nullable=False,
         default=True,
         index=True,
+    )
+    profile = relationship(
+    "UserProfile",
+    back_populates="user",
+    uselist=False,
+    cascade="all, delete-orphan",
+    )
+
+    hardware_profile = relationship(
+        "UserHardwareProfile",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
 
     company_id: Mapped[uuid.UUID | None] = mapped_column(

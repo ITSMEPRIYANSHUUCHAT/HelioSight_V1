@@ -7,3 +7,7 @@ from app.models.provider import ProviderIntegration
 from app.models.metric import Metric
  
 from app.models.assignment import PlantUserAssignment
+ 
+from app.models.user_profile import UserProfile
+from app.models.user_hardware import UserHardwareProfile
+ 

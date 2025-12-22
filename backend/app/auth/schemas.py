@@ -26,10 +26,29 @@ class CompanySignup(BaseModel):
 
 # ---------- MAIN SIGNUP ----------
 
+class UserSignup(BaseModel):
+    email: str
+    username: str
+    fullname: Optional[str]
+    password: str
+    confirm_password: str
+
+
 class SignupRequest(BaseModel):
     user: UserSignup
-    company: Optional[CompanySignup] = None
-    require_otp: bool = True
+
+    whatsapp_number: Optional[str] = Field(None, alias="whatsappNumber")
+    address: Optional[str]
+
+    panel_brand: Optional[str] = Field(None, alias="panelBrand")
+    panel_capacity: Optional[str] = Field(None, alias="panelCapacity")
+    panel_type: Optional[str] = Field(None, alias="panelType")
+
+    inverter_brand: Optional[str] = Field(None, alias="inverterBrand")
+    inverter_capacity: Optional[str] = Field(None, alias="inverterCapacity")
+
+    class Config:
+        populate_by_name = True
 
 
 # ---------- LOGIN ----------
