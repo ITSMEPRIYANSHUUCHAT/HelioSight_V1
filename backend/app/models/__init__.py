@@ -3,7 +3,7 @@ from app.models.company import Company
 from app.models.user import User
 from app.models.plant import Plant
 from app.models.device import Device
-from app.models.provider import ProviderIntegration
+from app.models.provider_integration import ProviderIntegration
 from app.models.metric import Metric
  
 from app.models.assignment import PlantUserAssignment

@@ -216,3 +216,37 @@ ALTER TABLE metrics SET (
 
 
 SELECT add_compression_policy('metrics', INTERVAL '30 days');
+-- =========================
+-- USER EXTERNAL CREDENTIALS
+-- =========================
+CREATE TABLE user_external_credentials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    user_id UUID NOT NULL
+        REFERENCES users(id) ON DELETE CASCADE,
+
+    provider VARCHAR(50) NOT NULL, 
+    -- solis / solarman / shinemonitor / others
+
+    external_username TEXT NOT NULL,
+    external_password TEXT NOT NULL, -- encrypted at app layer later
+
+    meta JSONB, -- optional: plant hints, region, customer codes
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    auth_type TEXT DEFAULT 'password',
+    status TEXT DEFAULT 'active',
+    last_verified_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ,
+
+    UNIQUE (user_id, provider)
+);
+
+CREATE INDEX idx_user_external_user
+    ON user_external_credentials(user_id);
+
+CREATE INDEX idx_user_external_provider
+    ON user_external_credentials(provider);
+

@@ -14,7 +14,7 @@ from app.database import SessionLocal
 from app.models.company import Company
 from app.models.plant import Plant
 from app.models.device import Device
-from app.models.provider import ProviderIntegration
+from backend.app.models.provider_integration import ProviderIntegration
 from app.models.metric import Metric
 
 

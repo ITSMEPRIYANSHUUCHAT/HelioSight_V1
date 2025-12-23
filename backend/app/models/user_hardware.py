@@ -1,7 +1,9 @@
+# app/models/user_hardware.py
 import uuid
-from sqlalchemy import String, ForeignKey
+from sqlalchemy import String, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
+from datetime import datetime
 
 from app.models.base import BaseModel
 
@@ -14,14 +16,15 @@ class UserHardwareProfile(BaseModel):
         ForeignKey("users.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
-        index=True,
     )
 
-    panel_brand: Mapped[str | None] = mapped_column(String, nullable=True)
-    panel_capacity_kw: Mapped[str | None] = mapped_column(String, nullable=True)
-    panel_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    panel_brand: Mapped[str | None]
+    panel_capacity_kw: Mapped[str | None]
+    panel_type: Mapped[str | None]
 
-    inverter_brand: Mapped[str | None] = mapped_column(String, nullable=True)
-    inverter_capacity_kw: Mapped[str | None] = mapped_column(String, nullable=True)
+    inverter_brand: Mapped[str | None]
+    inverter_capacity_kw: Mapped[str | None]
 
-    user = relationship("User", back_populates="hardware_profile")
+    created_at: Mapped[datetime]
+    updated_at: Mapped[datetime]
+    deleted_at: Mapped[datetime | None]

@@ -1,7 +1,9 @@
+# app/models/user_profile.py
 import uuid
-from sqlalchemy import String, ForeignKey
+from sqlalchemy import String, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
+from datetime import datetime
 
 from app.models.base import BaseModel
 
@@ -14,16 +16,17 @@ class UserProfile(BaseModel):
         ForeignKey("users.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
-        index=True,
     )
 
-    whatsapp_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    whatsapp_number: Mapped[str | None]
 
-    address_line_1: Mapped[str | None] = mapped_column(String, nullable=True)
-    address_line_2: Mapped[str | None] = mapped_column(String, nullable=True)
-    city: Mapped[str | None] = mapped_column(String, nullable=True)
-    state: Mapped[str | None] = mapped_column(String, nullable=True)
-    country: Mapped[str | None] = mapped_column(String, nullable=True)
-    pincode: Mapped[str | None] = mapped_column(String, nullable=True)
+    address_line_1: Mapped[str | None]
+    address_line_2: Mapped[str | None]
+    city: Mapped[str | None]
+    state: Mapped[str | None]
+    country: Mapped[str | None]
+    pincode: Mapped[str | None]
 
-    user = relationship("User", back_populates="profile")
+    created_at: Mapped[datetime]
+    updated_at: Mapped[datetime]
+    deleted_at: Mapped[datetime | None]

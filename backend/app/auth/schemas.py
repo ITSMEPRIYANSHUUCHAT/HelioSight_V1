@@ -4,7 +4,6 @@ from app.models.enums import UserRole
 
 
 # ---------- USER CORE ----------
-
 class UserSignup(BaseModel):
     username: str = Field(..., min_length=3)
     fullname: Optional[str] = None
@@ -36,7 +35,7 @@ class UserSignup(BaseModel):
 
 class SignupRequest(BaseModel):
     user: UserSignup
-
+    company: Optional[CompanySignup] = None
     whatsapp_number: Optional[str] = Field(None, alias="whatsappNumber")
     address: Optional[str]
 
