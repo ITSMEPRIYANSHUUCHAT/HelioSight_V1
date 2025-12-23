@@ -1,36 +1,28 @@
-from fastapi import HTTPException
-from collections import defaultdict
+from typing import List, Tuple
+from .schemas import BulkUserRow
 
 
-def validate_user_uniqueness(users):
-    seen = set()
-    for u in users:
-        if u.username in seen:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Duplicate username in users.csv: {u.username}"
-            )
-        seen.add(u.username)
+REQUIRED_FIELDS = [
+    "username",
+    "provider_type",
+    "provider_username",
+    "provider_password",
+]
 
 
-def validate_external_creds(users, external_creds):
-    user_set = {u.username for u in users}
+def validate_rows(rows: List[dict]) -> Tuple[List[BulkUserRow], List[str]]:
+    valid = []
+    errors = []
 
-    for row in external_creds:
-        if row.username not in user_set:
-            raise HTTPException(
-                status_code=400,
-                detail=f"External credential references unknown user: {row.username}"
-            )
+    for idx, row in enumerate(rows):
+        missing = [f for f in REQUIRED_FIELDS if not row.get(f)]
+        if missing:
+            errors.append(f"Row {idx+1}: missing {missing}")
+            continue
 
+        try:
+            valid.append(BulkUserRow(**row))
+        except Exception as e:
+            errors.append(f"Row {idx+1}: {str(e)}")
 
-def validate_provider_duplicates(external_creds):
-    tracker = defaultdict(set)
-
-    for row in external_creds:
-        if row.provider in tracker[row.username]:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Duplicate provider '{row.provider}' for user '{row.username}'"
-            )
-        tracker[row.username].add(row.provider)
+    return valid, errors

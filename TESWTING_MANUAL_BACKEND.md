@@ -63,10 +63,12 @@ curl http://localhost:8000/auth/login `
   -Method POST `
   -Headers @{ "Content-Type" = "application/json" } `
   -Body '{
-    "email": "superadmin@heliosight.ai",
-    "password": "SuperAdminPassword"
+    "email": "cust1@placeholder.local",
+    "password": "pass123"
   }'
 
+"email": "cust1@placeholder.local", 
+"password": "pass123"
 
 Save token:
 
@@ -111,14 +113,14 @@ PS C:\Users\priya\Documents\GitHub\HelioSight_V1> curl http://localhost:8000/aut
 
 STEP 4️⃣ – LOGIN AS COMPANY ADMIN
  $COMPANY_ADMIN_TOKEN = (
->>   curl http://localhost:8000/auth/login `
->>     -Method POST `
->>     -Headers @{ "Content-Type" = "application/json" } `
->>     -Body '{
->>       "email": "admin@testepc.com",
->>       "password": "Admin@123"
->>     }'
->> ).Content | ConvertFrom-Json | Select -ExpandProperty access_token
+   curl http://localhost:8000/auth/login `
+     -Method POST `
+     -Headers @{ "Content-Type" = "application/json" } `
+     -Body '{
+       "email": "admin@testepc.com",
+       "password": "Admin@123"
+     }'
+).Content | ConvertFrom-Json | Select -ExpandProperty access_token
 
 
  

@@ -2,29 +2,27 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from app.models.user import User
-from app.models.enums import UserRole
+from app.models.user_profile import UserProfile
+from app.models.user_hardware import UserHardwareProfile
 from app.models.user_external_credentials import UserExternalCredentials
+from app.models.enums import UserRole, ProviderType
 from app.auth.security import hash_password
 
-from app.bulk_upload.schemas import BulkUploadRequest
+from .schemas import BulkUserRow
 
 
-def bulk_create_users_and_creds(
+def process_bulk_upload(
     db: Session,
-    payload: BulkUploadRequest,
     company_id,
+    rows: list[BulkUserRow],
 ):
-    created_users = {}
-    results = {
-        "users_created": 0,
-        "external_credentials_created": 0,
-    }
+    created_users = 0
+    skipped_users = 0
+    created_creds = 0
 
-    # -------------------------
-    # CREATE USERS
-    # -------------------------
-    for row in payload.users:
-        existing = (
+    for row in rows:
+        # 1️⃣ User
+        user = (
             db.query(User)
             .filter(
                 User.username == row.username,
@@ -33,52 +31,71 @@ def bulk_create_users_and_creds(
             .first()
         )
 
-        if existing:
-            created_users[row.username] = existing
-            continue
+        if not user:
+            user = User(
+                username=row.username,
+                email=row.email or f"{row.username}@placeholder.local",
+                full_name=row.fullname,
+                hashed_password=hash_password(row.provider_password),
+                role=UserRole.end_user,
+                company_id=company_id,
+                is_active=True,
+            )
+            db.add(user)
+            db.flush()
+            created_users += 1
+        else:
+            skipped_users += 1
 
-        user = User(
-            username=row.username,
-            email=row.email or f"{row.username}@placeholder.local",
-            full_name=row.fullname,
-            hashed_password=hash_password(row.password),  # temp password
-            role=UserRole.end_user,
-            company_id=company_id,
-            is_active=True,
-        )
+        # 2️⃣ Profile
+        if row.whatsapp_number or row.address_line_1:
+            db.merge(
+                UserProfile(
+                    user_id=user.id,
+                    whatsapp_number=row.whatsapp_number,
+                    address_line_1=row.address_line_1,
+                )
+            )
 
-        db.add(user)
-        db.flush()
-        created_users[row.username] = user
-        results["users_created"] += 1
+        # 3️⃣ Hardware
+        if row.panel_brand or row.inverter_brand:
+            db.merge(
+                UserHardwareProfile(
+                    user_id=user.id,
+                    panel_brand=row.panel_brand,
+                    panel_capacity_kw=row.panel_capacity_kw,
+                    panel_type=row.panel_type,
+                    inverter_brand=row.inverter_brand,
+                    inverter_capacity_kw=row.inverter_capacity_kw,
+                )
+            )
 
-    # -------------------------
-    # CREATE EXTERNAL CREDS
-    # -------------------------
-    for row in payload.external_credentials:
-        user = created_users[row.username]
+        # 4️⃣ External credentials (MANDATORY)
+        provider_enum = ProviderType(row.provider_type)
 
-        exists = (
+        existing_cred = (
             db.query(UserExternalCredentials)
             .filter(
                 UserExternalCredentials.user_id == user.id,
-                UserExternalCredentials.provider == row.provider,
+                UserExternalCredentials.provider == provider_enum,
             )
             .first()
         )
 
-        if exists:
-            continue
-
-        cred = UserExternalCredentials(
-            user_id=user.id,
-            provider=row.provider,
-            external_username=row.external_username,
-            external_password=row.external_password,
-        )
-
-        db.add(cred)
-        results["external_credentials_created"] += 1
+        if not existing_cred:
+            cred = UserExternalCredentials(
+                user_id=user.id,
+                provider=provider_enum,
+                external_username=row.provider_username,
+                external_password=row.provider_password,
+            )
+            db.add(cred)
+            created_creds += 1
 
     db.commit()
-    return results
+
+    return {
+        "created_users": created_users,
+        "skipped_users": skipped_users,
+        "created_external_credentials": created_creds,
+    }
